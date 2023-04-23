@@ -25,6 +25,7 @@ std::list<myThread> readyThreads;
 std::map<int, myThread> allThreads;
 
 bool IDs[MAX_THREAD_NUM];
+
 myThread runThread;
 
 int quantum_time;
