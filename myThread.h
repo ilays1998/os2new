@@ -10,15 +10,18 @@
 /**
  * Probably used more for function then save data maybe change to static
  */
+enum state { running, ready, blocked };
+
 class myThread {
   std::stack<long> myStack; //Probabley no need
   std::list<long> registers; //Probabley no need
-  enum state { running, ready, blocked, sleeping };
   state curState;
 public:
-    state getCurState() const;
+    state getCurState(state state) const;
 
     void setCurState(state curState);
+
+    bool operator == (const myThread& t) const {return ID == t.ID;}
 
 public: myThread(int numID);
 

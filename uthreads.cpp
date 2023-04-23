@@ -5,7 +5,7 @@
  */
 #include <queue>
 #include "myThread.h"
-#include<map>
+#include <map>
 #include <algorithm>
 #include <iostream>
 #include <setjmp.h>
@@ -112,13 +112,19 @@ int uthread_terminate(int tid) {
       IDs[tid] = false;
       delete &allThreads[tid];
 
-      //running not empty
+      //ready not empty
       runThread = readyThreads.front();
       readyThreads.pop_front();
+      runThread.setCurState(running);
       setlongjmp(runThread->env, 1);
-
   }
-
+  if (allThreads[tid].getCurState(ready)){
+      readyThreads.remove(allThreads[tid]);
+  }
+  IDs[tid] = false;
+  delete &allThreads[tid];
+  allThreads[tid];
+  return 0;
 }
 
 
@@ -132,7 +138,7 @@ int uthread_terminate(int tid) {
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_block(int tid){
-    if (tid < 0 || tid >= MAX_THREAD_NUM || allThreads.count(tid) == 0){
+    if (tid < 0 || tid >= MAX_THREAD_NUM || !IDs[tid]){
         //error msg
         return -1;
     }
@@ -141,10 +147,22 @@ int uthread_block(int tid){
         return -1;
     }
     if (tid == runThread.get_id()){
-        // run the first ready thread
+        //block the running thread and save is state
+        sigsetjmp(runThread->env, 1);
+        allThreads[tid].setCurState(blocked);
         // change the previous and next threads stats
+        runThread = readyThreads.front();
+        readyThreads.pop_front();
+        runThread.setCurState(running);
+        // run the first ready thread
+        setlongjmp(runThread->env, 1);
+        return 0;
     }
-
+    if (allThreads[tid].getCurState(blocked))
+        return 0;
+    readyThreads.remove(allThreads[tid]);
+    allThreads[tid].setCurState(blocked);
+    return 0;
 }
 
 
