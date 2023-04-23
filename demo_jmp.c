@@ -61,8 +61,7 @@ typedef void (*thread_entry_point)(void);
 
 char stack0[STACK_SIZE];
 char stack1[STACK_SIZE];
-sigjmp_buf env[2];
-int current_thread = -1;
+setlongjmpint current_thread = -1;
 
 
 void jump_to_thread(int tid)
