@@ -17,6 +17,15 @@ class myThread {
   state curState;
   char *stack;
   int ID;
+  int quantum_life = 0;
+public:
+    int getQuantumLife() const {
+        return quantum_life;
+    }
+
+    void updateQuantumLife() {
+        quantum_life++;
+    }
 
 public: myThread(int numID, int stackSize);
     myThread ();

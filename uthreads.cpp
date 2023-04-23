@@ -34,8 +34,13 @@ bool IDs[MAX_THREAD_NUM];
 myThread runThread;
 
 int quantum_time;
+int quantum_time_counter;
 
 sigjmp_buf env[MAX_THREAD_NUM];
+
+struct sigaction sa = {0};
+struct itimerval timer;
+
 
 typedef unsigned int address_t;
 #define JB_SP 4
@@ -76,6 +81,8 @@ void setup_thread(int tid, char *stack, thread_entry_point entry_point)
 
 /* External interface */
 
+void timer_handler(int);
+void timer_init();
 
 /**
  * @brief initializes the myThread library.
@@ -92,10 +99,63 @@ void setup_thread(int tid, char *stack, thread_entry_point entry_point)
 int uthread_init(int quantum_usecs) {
   if (quantum_usecs < 1)
     return -1;
-  quantum_time = quantum_usecs;
   myThread *mainThread = new myThread(0, STACK_SIZE);
   allThreads[0] = *mainThread;
+  mainThread->setCurState(running);
+  runThread.updateQuantumLife();
+  setup_thread(0, mainThread->getStack(), nullptr);
+  quantum_time = quantum_usecs;
+  // Install timer_handler as the signal handler for SIGVTALRM.
+  timer_init();
+
   return 0;
+}
+
+
+
+void timer_init(){
+    quantum_time_counter = 1;
+    sa.sa_handler = &timer_handler;
+    if (sigaction(SIGVTALRM, &sa, NULL) < 0)
+    {
+        printf("sigaction error.");
+    }
+
+    // Configure the timer to expire after 1 sec... */
+    timer.it_value.tv_sec = 0;        // first time interval, seconds part
+    timer.it_value.tv_usec = quantum_time;        // first time interval, microseconds part
+
+    // configure the timer to expire every 3 sec after that.
+    timer.it_interval.tv_sec = 0;    // following time intervals, seconds part
+    timer.it_interval.tv_usec = quantum_time;    // following time intervals, microseconds part
+
+    // Start a virtual timer. It counts down whenever this process is executing.
+    if (setitimer(ITIMER_VIRTUAL, &timer, NULL))
+    {
+        printf("setitimer error.");
+    }
+}
+
+void jump_to_thread(int tid)
+{
+    runThread = allThreads[tid];
+    runThread.updateQuantumLife();
+    siglongjmp(env[tid], 1);
+}
+
+void timer_handler(int sig) {
+    quantum_time_counter++;
+    int ret_val = sigsetjmp(env[runThread.get_id()], 1);
+    //printf("yield: ret_val=%d\n", ret_val);
+    bool did_just_save_bookmark = ret_val == 0;
+//    bool did_jump_from_another_thread = ret_val != 0;
+    if (did_just_save_bookmark)
+    {
+        runThread = readyThreads.front();
+        readyThreads.pop_front();
+        runThread.setCurState(running);
+        jump_to_thread(runThread.get_id());
+    }
 }
 
 /**
@@ -143,10 +203,11 @@ int uthread_terminate(int tid) {
       delete &allThreads[tid];
 
       //ready not empty
-      runThread = readyThreads.front();
+/*      runThread = readyThreads.front();
       readyThreads.pop_front();
       runThread.setCurState(running);
-      siglongjmp(env[runThread.get_id()], 1);
+      siglongjmp(env[runThread.get_id()], 1);*/
+      timer_handler(1); // TODO dont know what int to send
   }
   if (allThreads[tid].getCurState(ready)){
       readyThreads.remove(allThreads[tid]);
@@ -181,11 +242,12 @@ int uthread_block(int tid){
         sigsetjmp(env[tid], 1);
         allThreads[tid].setCurState(blocked);
         // change the previous and next threads stats
-        runThread = readyThreads.front();
+/*        runThread = readyThreads.front();
         readyThreads.pop_front();
         runThread.setCurState(running);
         // run the first ready thread
-        siglongjmp(env[runThread.get_id()], 1);
+        siglongjmp(env[runThread.get_id()], 1);*/
+        timer_handler(1); // TODO
         return 0;
     }
     if (allThreads[tid].getCurState(blocked))
@@ -231,7 +293,17 @@ int uthread_resume(int tid){
  *
  * @return On success, return 0. On failure, return -1.
 */
-int uthread_sleep(int num_quantums);
+int uthread_sleep(int num_quantums){
+    if (runThread.get_id() == 0){
+        //error msg
+        return -1;
+    }
+    if (num_quantums < 0){
+        //error msg
+        return -1;
+    }
+
+}
 
 
 /**
@@ -252,7 +324,9 @@ int uthread_get_tid(){
  *
  * @return The total number of quantums.
 */
-int uthread_get_total_quantums();
+int uthread_get_total_quantums(){
+    return quantum_time_counter;
+}
 
 
 /**
@@ -264,7 +338,9 @@ int uthread_get_total_quantums();
  *
  * @return On success, return the number of quantums of the myThread with ID tid. On failure, return -1.
 */
-int uthread_get_quantums(int tid);
+int uthread_get_quantums(int tid){
+    return allThreads[tid].getQuantumLife();
+}
 
 
 #endif

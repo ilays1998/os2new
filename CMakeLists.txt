@@ -4,4 +4,4 @@ project(os2new)
 set(CMAKE_CXX_STANDARD 14)
 
 add_executable(os2new
-        demo_itimer.c)
+        uthreads.cpp)
