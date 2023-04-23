@@ -27,6 +27,7 @@ typedef void (*thread_entry_point)(void);
 /* internal interface */
 
 std::list<myThread> readyThreads;
+std::list<myThread> sleepingThreads;
 std::map<int, myThread> allThreads;
 
 bool IDs[MAX_THREAD_NUM];
@@ -83,6 +84,8 @@ void setup_thread(int tid, char *stack, thread_entry_point entry_point)
 
 void timer_handler(int);
 void timer_init();
+
+void awake();
 
 /**
  * @brief initializes the myThread library.
@@ -145,6 +148,7 @@ void jump_to_thread(int tid)
 
 void timer_handler(int sig) {
     quantum_time_counter++;
+    awake();
     int ret_val = sigsetjmp(env[runThread.get_id()], 1);
     //printf("yield: ret_val=%d\n", ret_val);
     bool did_just_save_bookmark = ret_val == 0;
@@ -155,6 +159,19 @@ void timer_handler(int sig) {
         readyThreads.pop_front();
         runThread.setCurState(running);
         jump_to_thread(runThread.get_id());
+    }
+}
+
+void awake() {
+    for (auto it = sleepingThreads.begin(); it != sleepingThreads.end();){
+        it->updateTimeToSleep();
+        if (it->getTimeToSleep() == 0){
+            readyThreads.push_back(allThreads[it->get_id()]);
+            allThreads[it->get_id()].setCurState(ready);
+            it = sleepingThreads.erase(it);
+        }
+        else
+            ++it;
     }
 }
 
@@ -200,6 +217,7 @@ int uthread_terminate(int tid) {
     exit(0);
   if (tid == runThread.get_id()) {
       IDs[tid] = false;
+      delete allThreads[tid].getStack();
       delete &allThreads[tid];
 
       //ready not empty
@@ -302,7 +320,9 @@ int uthread_sleep(int num_quantums){
         //error msg
         return -1;
     }
-
+    runThread.setTimeToSleep(num_quantums);
+    sleepingThreads.push_back(runThread);
+    timer_handler(1); // TODO
 }
 
 

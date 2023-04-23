@@ -18,6 +18,21 @@ class myThread {
   char *stack;
   int ID;
   int quantum_life = 0;
+  int timeToSleep;
+public:
+    int getTimeToSleep() const {
+        return timeToSleep;
+    }
+
+    int setTimeToSleep(int time) const {
+        return timeToSleep;
+    }
+
+
+    void updateTimeToSleep() {
+        myThread::timeToSleep--;
+    }
+
 public:
     int getQuantumLife() const {
         return quantum_life;
