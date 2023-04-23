@@ -174,7 +174,18 @@ int uthread_block(int tid){
  *
  * @return On success, return 0. On failure, return -1.
 */
-int uthread_resume(int tid);
+int uthread_resume(int tid){
+    if (tid < 0 || tid >= MAX_THREAD_NUM || !IDs[tid]){
+        //error msg
+        return -1;
+    }
+    if (allThreads[tid].getCurState(running) || allThreads[tid].getCurState(ready)){
+        //error msg
+        return -1;
+    }
+    readyThreads.push_back(allThreads[tid]);
+    allThreads[tid].setCurState(ready);
+}
 
 
 /**
