@@ -23,7 +23,6 @@ typedef void (*thread_entry_point)(void);
 
 std::list<myThread> readyThreads;
 std::map<int, myThread> allThreads;
-
 bool IDs[MAX_THREAD_NUM];
 
 myThread runThread;
@@ -80,6 +79,8 @@ int uthread_spawn(thread_entry_point entry_point){
     if (!entry_point)
         return -1;
     const int freeID = find_index_of_next_false(std::cbegin(IDs), std::cend(IDs));
+    if (freeID >= MAX_THREAD_NUM)
+        return -1;
     myThread *newThread = new myThread(freeID);
     allThreads[freeID] = *newThread;
 }
@@ -95,15 +96,7 @@ int uthread_spawn(thread_entry_point entry_point){
  * @return The function returns 0 if the myThread was successfully terminated and -1 otherwise. If a myThread terminates
  * itself or the main myThread is terminated, the function does not return.
 */
-int uthread_terminate(int tid) {
-  if (tid == 0)
-    exit(0);
-  if (tid = runThread.ID) {
-      IDs[tid] = false;
-
-  }
-}
-
+int uthread_terminate(int tid);
 
 /**
  * @brief Blocks the myThread with ID tid. The myThread may be resumed later using uthread_resume.
@@ -114,7 +107,13 @@ int uthread_terminate(int tid) {
  *
  * @return On success, return 0. On failure, return -1.
 */
-int uthread_block(int tid);
+int uthread_block(int tid){
+    if (tid < 0 || tid >= MAX_THREAD_NUM || allThreads.count(tid) == 0){
+        //error msg
+        return -1;
+    }
+
+}
 
 
 /**
