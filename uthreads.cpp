@@ -25,6 +25,8 @@ std::queue<myThread> readyThreads;
 std::map<int, myThread> allThreads;
 bool IDs[MAX_THREAD_NUM];
 
+int quantum_time;
+
 
 //taken from https://wandbox.org/permlink/PCKVrRgLcv0xOZvd
 template <class It>
@@ -50,7 +52,14 @@ constexpr size_t find_index_of_next_false(It first, It last)
  *
  * @return On success, return 0. On failure, return -1.
 */
-int uthread_init(int quantum_usecs);
+int uthread_init(int quantum_usecs) {
+  if (quantum_usecs < 1)
+    return -1;
+  quantum_time = quantum_usecs;
+  myThread *mainThread = new myThread(0);
+  allThreads[0] = *mainThread;
+  return 0;
+}
 
 /**
  * @brief Creates a new myThread, whose entry point is the function entry_point with the signature
@@ -68,7 +77,7 @@ int uthread_spawn(thread_entry_point entry_point){
     if (!entry_point)
         return -1;
     const int freeID = find_index_of_next_false(std::cbegin(IDs), std::cend(IDs));
-    myThread *newThread = new myThread();
+    myThread *newThread = new myThread(freeID);
     allThreads[freeID] = *newThread;
 }
 

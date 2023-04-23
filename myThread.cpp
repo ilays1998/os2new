@@ -3,3 +3,10 @@
 //
 
 #include "myThread.h"
+myThread::myThread (int numID) {
+  ID = numID;
+}
+myThread::myThread ()
+{
+}
+

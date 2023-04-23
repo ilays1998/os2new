@@ -10,11 +10,13 @@
  * Probably used more for function then save data maybe change to static
  */
 class myThread {
-    std::stack<long> myStack; //Probabley no need
+  std::stack<long> myStack; //Probabley no need
     std::list<long> registers; //Probabley no need
+    static int ID;
 
-public: myThread();
+public: myThread(int numID);
 
+  myThread ();
 };
 
 
