@@ -13,47 +13,41 @@
 enum state { running, ready, blocked };
 
 class myThread {
-  std::list<long> registers; //Probabley no need
+  //std::list<long> registers; //Probabley no need
   state curState;
   char *stack;
   int ID;
-  int quantum_life = 0;
+  int quantum_life;
   int timeToSleep;
-public:
-    int getTimeToSleep() const {
-        return timeToSleep;
-    }
-
-    int setTimeToSleep(int time) const {
-        return timeToSleep;
-    }
-
-
-    void updateTimeToSleep() {
-        myThread::timeToSleep--;
-    }
 
 public:
-    int getQuantumLife() const {
-        return quantum_life;
-    }
-
-    void updateQuantumLife() {
-        quantum_life++;
-    }
-
-public: myThread(int numID, int stackSize);
+    myThread(int numID, int stackSize);
     myThread ();
+    int getTimeToSleep() const;
 
-    state getCurState(state state) const;
+
+
+    bool operator == (const myThread& t) const;
 
     void setCurState(state curState);
 
-    bool operator == (const myThread& t) const {return ID == t.ID;}
+
 
     char *getStack();
 
     int get_id () const;
+
+    void setTimeToSleep(int time);
+
+    void updateTimeToSleep();
+
+    int getQuantumLife() const;
+
+    void updateQuantumLife();
+
+    state getCurState() const;
+
+    void deleteStack();
 };
 
 

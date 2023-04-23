@@ -26,13 +26,13 @@ typedef void (*thread_entry_point)(void);
 
 /* internal interface */
 
-std::list<myThread> readyThreads;
-std::list<myThread> sleepingThreads;
+std::list<int> readyThreads;
+std::list<int> sleepingThreads;
 std::map<int, myThread> allThreads;
 
 bool IDs[MAX_THREAD_NUM];
 
-myThread runThread;
+int runThread;
 
 int quantum_time;
 int quantum_time_counter;
@@ -43,35 +43,74 @@ struct sigaction sa = {0};
 struct itimerval timer;
 
 
-typedef unsigned int address_t;
-#define JB_SP 4
-#define JB_PC 5
+#ifdef __x86_64__
+/* code for 64 bit Intel arch */
 
+typedef unsigned long address_t;
+#define JB_SP 6
+#define JB_PC 7
 
-//taken from https://wandbox.org/permlink/PCKVrRgLcv0xOZvd
-template <class It>
-constexpr size_t find_index_of_next_false(It first, It last)
-{
-    size_t size = std::distance(first, last);
-    return size <= 0 ? size : std::distance(first, std::find(first + 1, last, false));
-}
+#define DEF "thread library error: quantum_usecs must be positive integer"
 
+#define BLOCKED 0
+
+#define SLEEP 1
+
+#define READY 2
+
+#define TERMINATED 3
+
+/* A translation is required when using an address of a variable.
+   Use this as a black box in your code. */
 address_t translate_address(address_t addr)
 {
     address_t ret;
-    asm volatile("xor    %%gs:0x18,%0\n"
-                 "rol    $0x9,%0\n"
+    asm volatile("xor    %%fs:0x30,%0\n"
+                 "rol    $0x11,%0\n"
             : "=g" (ret)
             : "0" (addr));
     return ret;
 }
 
+#else
+/* code for 32 bit Intel arch */
+
+typedef unsigned int address_t;
+#define JB_SP 4
+#define JB_PC 5
+
+
+/* A translation is required when using an address of a variable.
+   Use this as a black box in your code. */
+address_t translate_address(address_t addr)
+{
+    address_t ret;
+    asm volatile("xor    %%gs:0x18,%0\n"
+                 "rol    $0x9,%0\n"
+    : "=g" (ret)
+    : "0" (addr));
+    return ret;
+}
+
+
+#endif
+
+
+//taken from https://wandbox.org/permlink/PCKVrRgLcv0xOZvd
+template <class It>
+ size_t find_index_of_next_false(It first, It last)
+{
+    size_t size = std::distance(first, last);
+    return size <= 0 ? size : std::distance(first, std::find(first + 1, last, false));
+}
+
+
 void setup_thread(int tid, char *stack, thread_entry_point entry_point)
 {
     // initializes env[tid] to use the right stack, and to run from the function 'entry_point', when we'll use
     // siglongjmp to jump into the thread.
-    address_t sp = (address_t) reinterpret_cast<std::uintptr_t>(stack) + STACK_SIZE - sizeof(address_t);
-    address_t pc = (address_t) reinterpret_cast<std::uintptr_t>(entry_point);
+    address_t sp = (address_t) stack + STACK_SIZE - sizeof(address_t);
+    address_t pc = (address_t) entry_point;
     sigsetjmp(env[tid], 1);
     (env[tid]->__jmpbuf)[JB_SP] = translate_address(sp);
     (env[tid]->__jmpbuf)[JB_PC] = translate_address(pc);
@@ -87,6 +126,8 @@ void timer_init();
 
 void awake();
 
+void ready_change();
+
 /**
  * @brief initializes the myThread library.
  *
@@ -97,16 +138,20 @@ void awake();
  * The input to the function is the length of a quantum in micro-seconds.
  * It is an error to call this function with non-positive quantum_usecs.
  *
+ *
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_init(int quantum_usecs) {
-  if (quantum_usecs < 1)
-    return -1;
-  myThread *mainThread = new myThread(0, STACK_SIZE);
-  allThreads[0] = *mainThread;
-  mainThread->setCurState(running);
-  runThread.updateQuantumLife();
-  setup_thread(0, mainThread->getStack(), nullptr);
+  if (quantum_usecs <= 0)
+  {
+      std::cerr << DEF << std::endl;
+      return -1;
+  }
+  allThreads[0] = myThread(0, STACK_SIZE);
+  allThreads[0].setCurState(running);
+  allThreads[0].updateQuantumLife();
+  IDs[0] = true;
+  setup_thread(0, allThreads[0].getStack(), nullptr);
   quantum_time = quantum_usecs;
   // Install timer_handler as the signal handler for SIGVTALRM.
   timer_init();
@@ -133,7 +178,7 @@ void timer_init(){
     timer.it_interval.tv_usec = quantum_time;    // following time intervals, microseconds part
 
     // Start a virtual timer. It counts down whenever this process is executing.
-    if (setitimer(ITIMER_VIRTUAL, &timer, NULL))
+    if (setitimer(ITIMER_VIRTUAL, &timer, nullptr))
     {
         printf("setitimer error.");
     }
@@ -141,33 +186,59 @@ void timer_init(){
 
 void jump_to_thread(int tid)
 {
-    runThread = allThreads[tid];
-    runThread.updateQuantumLife();
+    runThread = tid;
     siglongjmp(env[tid], 1);
 }
 
 void timer_handler(int sig) {
     quantum_time_counter++;
+
     awake();
-    int ret_val = sigsetjmp(env[runThread.get_id()], 1);
+    int ret_val = sigsetjmp(env[runThread], 1);
     //printf("yield: ret_val=%d\n", ret_val);
     bool did_just_save_bookmark = ret_val == 0;
 //    bool did_jump_from_another_thread = ret_val != 0;
     if (did_just_save_bookmark)
     {
-        runThread = readyThreads.front();
-        readyThreads.pop_front();
-        runThread.setCurState(running);
-        jump_to_thread(runThread.get_id());
+        switch (sig) {
+            case BLOCKED:
+                allThreads[runThread].setCurState(blocked);
+                break;
+/*
+            case SLEEP:
+                runThread.setCurState();
+*/
+            case READY:
+                allThreads[runThread].setCurState(ready);
+                break;
+            case TERMINATED:
+                break;
+            default:
+                allThreads[runThread].setCurState(ready);
+                readyThreads.push_back(runThread);
+                break;
+        }
+        if(!readyThreads.empty()){
+            runThread = readyThreads.front();
+            readyThreads.pop_front();
+            allThreads[runThread].setCurState(running);
+            allThreads[runThread].updateQuantumLife();
+        }
+        else{
+            runThread = 0;
+            allThreads[runThread].setCurState(running);
+            allThreads[runThread].updateQuantumLife();
+        }
+        jump_to_thread(runThread);
     }
 }
 
 void awake() {
     for (auto it = sleepingThreads.begin(); it != sleepingThreads.end();){
-        it->updateTimeToSleep();
-        if (it->getTimeToSleep() == 0){
-            readyThreads.push_back(allThreads[it->get_id()]);
-            allThreads[it->get_id()].setCurState(ready);
+        allThreads[*it].updateTimeToSleep();
+        if (allThreads[*it].getTimeToSleep() == 0){
+            if (allThreads[*it].getCurState() != blocked)
+                readyThreads.push_back(*it);
             it = sleepingThreads.erase(it);
         }
         else
@@ -190,12 +261,14 @@ void awake() {
 int uthread_spawn(thread_entry_point entry_point){
     if (!entry_point)
         return -1;
-    const int freeID = find_index_of_next_false(std::cbegin(IDs), std::cend(IDs));
+    const int freeID = find_index_of_next_false(std::begin(IDs), std::end(IDs));
     if (freeID >= MAX_THREAD_NUM)
         return -1;
-    myThread *newThread = new myThread(freeID, STACK_SIZE);
-    allThreads[freeID] = *newThread;
-    setup_thread(freeID, newThread->getStack(), entry_point);
+    allThreads[freeID] =  myThread(freeID, STACK_SIZE);
+    setup_thread(freeID, allThreads[freeID].getStack(), entry_point);
+    readyThreads.push_back(freeID);
+    IDs[freeID] = true;
+    return freeID;
 }
 
 
@@ -211,24 +284,20 @@ int uthread_spawn(thread_entry_point entry_point){
 */
 int uthread_terminate(int tid) {
   if (tid < 0 || tid >= MAX_THREAD_NUM || !IDs[tid]) {
-    return -1;
+      std::cerr << "thread library error: no such thread" << std::endl;
+      return -1;
   }
-  if (tid == 0)
+  if (tid == 0) //TODO erase the memory
     exit(0);
-  if (tid == runThread.get_id()) {
+  if (tid == runThread) {
       IDs[tid] = false;
-      delete allThreads[tid].getStack();
-      delete &allThreads[tid];
-
-      //ready not empty
-/*      runThread = readyThreads.front();
-      readyThreads.pop_front();
-      runThread.setCurState(running);
-      siglongjmp(env[runThread.get_id()], 1);*/
-      timer_handler(1); // TODO dont know what int to send
+      allThreads[tid].deleteStack();
+      allThreads.erase(tid);
+      timer_handler(TERMINATED); // TODO dont know what int to send
+      return 0;
   }
-  if (allThreads[tid].getCurState(ready)){
-      readyThreads.remove(allThreads[tid]);
+  else if (allThreads[tid].getCurState() == ready){
+      readyThreads.remove(tid);
   }
   IDs[tid] = false;
   delete &allThreads[tid];
@@ -248,14 +317,14 @@ int uthread_terminate(int tid) {
 */
 int uthread_block(int tid){
     if (tid < 0 || tid >= MAX_THREAD_NUM || !IDs[tid]){
-        //error msg
+        std::cerr << "thread library error: no such thread" << std::endl;
         return -1;
     }
     if (tid == 0){
-        //error msg
+        std::cerr << "thread library error: can't block main thread" << std::endl;
         return -1;
     }
-    if (tid == runThread.get_id()){
+    if (tid == runThread){
         //block the running thread and save is state
         sigsetjmp(env[tid], 1);
         allThreads[tid].setCurState(blocked);
@@ -265,12 +334,12 @@ int uthread_block(int tid){
         runThread.setCurState(running);
         // run the first ready thread
         siglongjmp(env[runThread.get_id()], 1);*/
-        timer_handler(1); // TODO
+        timer_handler(BLOCKED); // TODO
         return 0;
     }
-    if (allThreads[tid].getCurState(blocked))
+    if (allThreads[tid].getCurState() == blocked)
         return 0;
-    readyThreads.remove(allThreads[tid]);
+    readyThreads.remove(tid);
     allThreads[tid].setCurState(blocked);
     return 0;
 }
@@ -286,15 +355,16 @@ int uthread_block(int tid){
 */
 int uthread_resume(int tid){
     if (tid < 0 || tid >= MAX_THREAD_NUM || !IDs[tid]){
-        //error msg
+        std::cerr << "thread library error: no such thread" << std::endl;
         return -1;
     }
-    if (allThreads[tid].getCurState(running) || allThreads[tid].getCurState(ready)){
-        //error msg
+    if (allThreads[tid].getCurState() == running || allThreads[tid].getCurState() == ready){
+        std::cerr << "thread library error: the thread is not blocked" << std::endl;
         return -1;
     }
-    readyThreads.push_back(allThreads[tid]);
+    readyThreads.push_back(tid);
     allThreads[tid].setCurState(ready);
+    return 0;
 }
 
 
@@ -312,17 +382,18 @@ int uthread_resume(int tid){
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_sleep(int num_quantums){
-    if (runThread.get_id() == 0){
-        //error msg
+    if (runThread == 0){
+        std::cerr << "thread library error: main thread can't sleep" << std::endl;
         return -1;
     }
     if (num_quantums < 0){
-        //error msg
+        std::cerr << "thread library error: no such thread" << std::endl;
         return -1;
     }
-    runThread.setTimeToSleep(num_quantums);
+    allThreads[runThread].setTimeToSleep(num_quantums);
     sleepingThreads.push_back(runThread);
-    timer_handler(1); // TODO
+    timer_handler(3); // TODO
+    return 0;
 }
 
 
@@ -332,7 +403,7 @@ int uthread_sleep(int num_quantums){
  * @return The ID of the calling myThread.
 */
 int uthread_get_tid(){
-    return runThread.get_id();
+    return runThread;
 }
 
 
@@ -359,6 +430,10 @@ int uthread_get_total_quantums(){
  * @return On success, return the number of quantums of the myThread with ID tid. On failure, return -1.
 */
 int uthread_get_quantums(int tid){
+    if (tid < 0 || tid >= MAX_THREAD_NUM || !IDs[tid]){
+        std::cerr << "thread library error: no such thread" << std::endl;
+        return -1;
+    }
     return allThreads[tid].getQuantumLife();
 }
 
