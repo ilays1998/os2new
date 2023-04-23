@@ -9,4 +9,8 @@ myThread::myThread (int numID) {
 myThread::myThread ()
 {
 }
+int myThread::get_id () const
+{
+  return ID;
+}
 

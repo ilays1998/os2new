@@ -106,7 +106,7 @@ int uthread_terminate(int tid) {
   }
   if (tid == 0)
     exit(0);
-  if (tid = runThread.ID) {
+  if (tid == runThread.get_id()) {
       IDs[tid] = false;
       delete &allThreads[tid];
 

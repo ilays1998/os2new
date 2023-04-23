@@ -18,7 +18,8 @@ class myThread {
 public: myThread(int numID);
 
   myThread ();
- public:static int ID;
+  int ID;
+  int get_id () const;
 };
 
 
