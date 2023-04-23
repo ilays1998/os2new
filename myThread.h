@@ -13,21 +13,23 @@
 enum state { running, ready, blocked };
 
 class myThread {
-  std::stack<long> myStack; //Probabley no need
   std::list<long> registers; //Probabley no need
   state curState;
-public:
+  char *stack;
+  int ID;
+
+public: myThread(int numID, int stackSize);
+    myThread ();
+
     state getCurState(state state) const;
 
     void setCurState(state curState);
 
     bool operator == (const myThread& t) const {return ID == t.ID;}
 
-public: myThread(int numID);
+    char *getStack();
 
-  myThread ();
-  int ID;
-  int get_id () const;
+    int get_id () const;
 };
 
 

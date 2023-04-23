@@ -35,6 +35,12 @@ myThread runThread;
 
 int quantum_time;
 
+sigjmp_buf env[MAX_THREAD_NUM];
+
+typedef unsigned int address_t;
+#define JB_SP 4
+#define JB_PC 5
+
 
 //taken from https://wandbox.org/permlink/PCKVrRgLcv0xOZvd
 template <class It>
@@ -43,6 +49,29 @@ constexpr size_t find_index_of_next_false(It first, It last)
     size_t size = std::distance(first, last);
     return size <= 0 ? size : std::distance(first, std::find(first + 1, last, false));
 }
+
+address_t translate_address(address_t addr)
+{
+    address_t ret;
+    asm volatile("xor    %%gs:0x18,%0\n"
+                 "rol    $0x9,%0\n"
+            : "=g" (ret)
+            : "0" (addr));
+    return ret;
+}
+
+void setup_thread(int tid, char *stack, thread_entry_point entry_point)
+{
+    // initializes env[tid] to use the right stack, and to run from the function 'entry_point', when we'll use
+    // siglongjmp to jump into the thread.
+    address_t sp = (address_t) reinterpret_cast<std::uintptr_t>(stack) + STACK_SIZE - sizeof(address_t);
+    address_t pc = (address_t) reinterpret_cast<std::uintptr_t>(entry_point);
+    sigsetjmp(env[tid], 1);
+    (env[tid]->__jmpbuf)[JB_SP] = translate_address(sp);
+    (env[tid]->__jmpbuf)[JB_PC] = translate_address(pc);
+    sigemptyset(&env[tid]->__saved_mask);
+}
+
 
 
 /* External interface */
@@ -64,7 +93,7 @@ int uthread_init(int quantum_usecs) {
   if (quantum_usecs < 1)
     return -1;
   quantum_time = quantum_usecs;
-  myThread *mainThread = new myThread(0);
+  myThread *mainThread = new myThread(0, STACK_SIZE);
   allThreads[0] = *mainThread;
   return 0;
 }
@@ -87,8 +116,9 @@ int uthread_spawn(thread_entry_point entry_point){
     const int freeID = find_index_of_next_false(std::cbegin(IDs), std::cend(IDs));
     if (freeID >= MAX_THREAD_NUM)
         return -1;
-    myThread *newThread = new myThread(freeID);
+    myThread *newThread = new myThread(freeID, STACK_SIZE);
     allThreads[freeID] = *newThread;
+    setup_thread(freeID, newThread->getStack(), entry_point);
 }
 
 
@@ -116,7 +146,7 @@ int uthread_terminate(int tid) {
       runThread = readyThreads.front();
       readyThreads.pop_front();
       runThread.setCurState(running);
-      setlongjmp(runThread->env, 1);
+      siglongjmp(env[runThread.get_id()], 1);
   }
   if (allThreads[tid].getCurState(ready)){
       readyThreads.remove(allThreads[tid]);
@@ -148,14 +178,14 @@ int uthread_block(int tid){
     }
     if (tid == runThread.get_id()){
         //block the running thread and save is state
-        sigsetjmp(runThread->env, 1);
+        sigsetjmp(env[tid], 1);
         allThreads[tid].setCurState(blocked);
         // change the previous and next threads stats
         runThread = readyThreads.front();
         readyThreads.pop_front();
         runThread.setCurState(running);
         // run the first ready thread
-        setlongjmp(runThread->env, 1);
+        siglongjmp(env[runThread.get_id()], 1);
         return 0;
     }
     if (allThreads[tid].getCurState(blocked))
@@ -209,7 +239,9 @@ int uthread_sleep(int num_quantums);
  *
  * @return The ID of the calling myThread.
 */
-int uthread_get_tid();
+int uthread_get_tid(){
+    return runThread.get_id();
+}
 
 
 /**

@@ -3,8 +3,9 @@
 //
 
 #include "myThread.h"
-myThread::myThread (int numID) {
+myThread::myThread(int numID, int stackSize) {
   ID = numID;
+  stack = new char [stackSize];
 }
 myThread::myThread ()
 {
@@ -20,5 +21,9 @@ state myThread::getCurState(state state) const {
 
 void myThread::setCurState(state curState) {
     myThread::curState = curState;
+}
+
+char *myThread::getStack() {
+    return stack;
 }
 
