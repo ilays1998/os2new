@@ -14,3 +14,11 @@ int myThread::get_id () const
   return ID;
 }
 
+myThread::state myThread::getCurState() const {
+    return curState;
+}
+
+void myThread::setCurState(myThread::state curState) {
+    myThread::curState = curState;
+}
+

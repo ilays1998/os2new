@@ -14,6 +14,11 @@ class myThread {
   std::stack<long> myStack; //Probabley no need
   std::list<long> registers; //Probabley no need
   enum state { running, ready, blocked, sleeping };
+  state curState;
+public:
+    state getCurState() const;
+
+    void setCurState(state curState);
 
 public: myThread(int numID);
 
