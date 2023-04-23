@@ -102,7 +102,25 @@ int uthread_spawn(thread_entry_point entry_point){
  * @return The function returns 0 if the myThread was successfully terminated and -1 otherwise. If a myThread terminates
  * itself or the main myThread is terminated, the function does not return.
 */
-int uthread_terminate(int tid);
+int uthread_terminate(int tid) {
+  if (tid < 0 || tid >= MAX_THREAD_NUM || !IDs[tid]) {
+    return -1;
+  }
+  if (tid == 0)
+    exit(0);
+  if (tid == runThread.get_id()) {
+      IDs[tid] = false;
+      delete &allThreads[tid];
+
+      //running not empty
+      runThread = readyThreads.front();
+      readyThreads.pop_front();
+      setlongjmp(runThread->env, 1);
+
+  }
+
+}
+
 
 /**
  * @brief Blocks the myThread with ID tid. The myThread may be resumed later using uthread_resume.
@@ -150,7 +168,7 @@ int uthread_resume(int tid);
  * at the same time, the order in which they're added to the end of the READY queue doesn't matter.
  * The number of quantums refers to the number of times a new quantum starts, regardless of the reason. Specifically,
  * the quantum of the myThread which has made the call to uthread_sleep isn’t counted.
- * It is considered an error if the main midyThread (tid == 0) calls this function.
+ * It is considered an error if the main myThread (tid == 0) calls this function.
  *
  * @return On success, return 0. On failure, return -1.
 */
