@@ -21,7 +21,7 @@ typedef void (*thread_entry_point)(void);
 
 /* internal interface */
 
-std::queue<myThread> readyThreads;
+std::list<myThread> readyThreads;
 std::map<int, myThread> allThreads;
 bool IDs[MAX_THREAD_NUM];
 
