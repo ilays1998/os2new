@@ -129,7 +129,7 @@ void setup_thread(int tid, char *stack, thread_entry_point entry_point)
     address_t pc = (address_t) entry_point;
     sigsetjmp(env[tid], 1);
     (env[tid]->__jmpbuf)[JB_SP] = translate_address(sp);
-    (env[tid]->__jmpbuf)queue[JB_PC] = translate_address(pc);
+    (env[tid]->__jmpbuf)[JB_PC] = translate_address(pc);
     sigemptyset(&env[tid]->__saved_mask);
 }
 
