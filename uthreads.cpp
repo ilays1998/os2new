@@ -23,7 +23,9 @@ typedef void (*thread_entry_point)(void);
 
 std::list<myThread> readyThreads;
 std::map<int, myThread> allThreads;
+
 bool IDs[MAX_THREAD_NUM];
+myThread runThread;
 
 int quantum_time;
 
@@ -92,7 +94,14 @@ int uthread_spawn(thread_entry_point entry_point){
  * @return The function returns 0 if the myThread was successfully terminated and -1 otherwise. If a myThread terminates
  * itself or the main myThread is terminated, the function does not return.
 */
-int uthread_terminate(int tid);
+int uthread_terminate(int tid) {
+  if (tid == 0)
+    exit(0);
+  if (tid = runThread.ID) {
+      IDs[tid] = false;
+
+  }
+}
 
 
 /**
