@@ -13,7 +13,7 @@ class myThread {
   std::stack<long> myStack; //Probabley no need
   std::list<long> registers; //Probabley no need
   static int ID;
-  enum state { running, ready, blocked };
+  enum state { running, ready, blocked, sleeping };
 
 public: myThread(int numID);
 

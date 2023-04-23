@@ -112,6 +112,13 @@ int uthread_block(int tid){
         //error msg
         return -1;
     }
+    if (tid == 0){
+        //error msg
+        return -1;
+    }
+    if (tid == runThread.ID){
+        // run the first ready thread
+    }
 
 }
 
@@ -136,7 +143,7 @@ int uthread_resume(int tid);
  * at the same time, the order in which they're added to the end of the READY queue doesn't matter.
  * The number of quantums refers to the number of times a new quantum starts, regardless of the reason. Specifically,
  * the quantum of the myThread which has made the call to uthread_sleep isn’t counted.
- * It is considered an error if the main myThread (tid == 0) calls this function.
+ * It is considered an error if the main midyThread (tid == 0) calls this function.
  *
  * @return On success, return 0. On failure, return -1.
 */
