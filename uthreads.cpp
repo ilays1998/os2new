@@ -13,6 +13,8 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <stdbool.h>
+#include <iterator>
+#include <set>
 
 
 #ifndef _UTHREADS_H
@@ -202,9 +204,11 @@ void timer_handler(int sig) {
     {
         switch (sig) {
             case BLOCKED:
-                allThreads[runThread].setCurState(blocked);
+                if (allThreads[runThread].getTimeToSleep() > 0)
+                    allThreads[runThread].setCurState(sleep_and_blocked);
+                else
+                    allThreads[runThread].setCurState(blocked);
                 break;
-
             case SLEEP:
                 if (allThreads[runThread].getCurState() == blocked)
                     allThreads[runThread].setCurState(sleep_and_blocked);
@@ -215,6 +219,9 @@ void timer_handler(int sig) {
                 allThreads[runThread].setCurState(ready);
                 break;
             case TERMINATED:
+                IDs[runThread] = false;
+                allThreads[runThread].deleteStack();
+                allThreads.erase(runThread);
                 break;
             default:
                 allThreads[runThread].setCurState(ready);
@@ -237,19 +244,37 @@ void timer_handler(int sig) {
 }
 
 void awake() {
-    for (auto it = sleepingThreads.begin(); it != sleepingThreads.end();){
-        if (allThreads[*it].getCurState() != running)
-            allThreads[*it].updateTimeToSleep();
-        if (allThreads[*it].getTimeToSleep() == 0){
-            if (allThreads[*it].getCurState() != sleep_and_blocked)
+    std::set<int> need_to_wake;
+    for (auto it = sleepingThreads.begin(); it != sleepingThreads.end(); ++it){
+        if (allThreads[*it].getCurState() == running){ // didn't pass a quantum yet
+            continue;
+        }
+        allThreads[*it].updateTimeToSleep();
+        if (allThreads[*it].getTimeToSleep() <= 0){
+            need_to_wake.insert(*it);
+/*            if (allThreads[*it].getCurState() != sleep_and_blocked)
                 readyThreads.push_back(*it);
             else
                 allThreads[*it].setCurState(blocked);
-            it = sleepingThreads.erase(it);
+            allThreads[*it].setTimeToSleep(0);
+            it = sleepingThreads.erase(it);*/
         }
-        else
-            ++it;
     }
+    for (auto it = need_to_wake.begin(); it != need_to_wake.end(); ++it){
+        if (allThreads[*it].getCurState() != sleep_and_blocked)
+            readyThreads.push_back(*it);
+        else
+            allThreads[*it].setCurState(blocked);
+        allThreads[*it].setTimeToSleep(0);
+        sleepingThreads.remove(*it);
+    }
+
+
+/*    for (auto it = sleepingThreads.begin(); it != sleepingThreads.end();it++) {
+        printf("%d",*it);
+        std::cout << " ";
+    }
+    std::cout << "\n";*/
 }
 
 /**
@@ -301,19 +326,19 @@ int uthread_terminate(int tid) {
   }
   if (tid == 0) //TODO erase the memory
     exit(0);
-  if (tid == runThread) {
-      IDs[tid] = false;
-      allThreads[tid].deleteStack();
-      allThreads.erase(tid);
-      timer_handler(TERMINATED); // TODO dont know what int to send
+  if (allThreads[tid].getCurState() == running) {
+      timer_handler(TERMINATED);
       return 0;
   }
   else if (allThreads[tid].getCurState() == ready){
       readyThreads.remove(tid);
   }
+  else if (allThreads[tid].getCurState() == sleep_and_blocked || allThreads[tid].getCurState() == sleeping){
+      sleepingThreads.remove(tid);
+  }
   IDs[tid] = false;
-    allThreads[tid].deleteStack();
-    allThreads.erase(tid);
+  allThreads[tid].deleteStack();
+  allThreads.erase(tid);
   return 0;
 }
 
@@ -370,7 +395,12 @@ int uthread_resume(int tid){
         std::cerr << "thread library error: no such thread" << std::endl;
         return -1;
     }
-    if (allThreads[tid].getCurState() == running || allThreads[tid].getCurState() == ready){
+    if (allThreads[tid].getCurState() == running || allThreads[tid].getCurState() == ready ||
+        allThreads[tid].getCurState() == sleeping){
+        return 0;
+    }
+    if (allThreads[tid].getCurState() == sleep_and_blocked){
+        allThreads[tid].setCurState(sleeping);
         return 0;
     }
     readyThreads.push_back(tid);
@@ -398,7 +428,7 @@ int uthread_sleep(int num_quantums){
         return -1;
     }
     if (num_quantums < 0){
-        std::cerr << "thread library error: no such thread" << std::endl;
+        std::cerr << "thread library error: can't sleep negative time" << std::endl;
         return -1;
     }
     allThreads[runThread].setTimeToSleep(num_quantums);
