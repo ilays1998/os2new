@@ -10,7 +10,7 @@
 /**
  * Probably used more for function then save data maybe change to static
  */
-enum state { running, ready, blocked };
+enum state { running, ready, blocked , sleep_and_blocked, sleeping};
 
 class myThread {
   //std::list<long> registers; //Probabley no need

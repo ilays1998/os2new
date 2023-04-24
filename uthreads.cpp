@@ -204,10 +204,13 @@ void timer_handler(int sig) {
             case BLOCKED:
                 allThreads[runThread].setCurState(blocked);
                 break;
-/*
+
             case SLEEP:
-                runThread.setCurState();
-*/
+                if (allThreads[runThread].getCurState() == blocked)
+                    allThreads[runThread].setCurState(sleep_and_blocked);
+                else
+                    allThreads[runThread].setCurState(sleeping);
+                break;
             case READY:
                 allThreads[runThread].setCurState(ready);
                 break;
@@ -235,10 +238,13 @@ void timer_handler(int sig) {
 
 void awake() {
     for (auto it = sleepingThreads.begin(); it != sleepingThreads.end();){
-        allThreads[*it].updateTimeToSleep();
+        if (allThreads[*it].getCurState() != running)
+            allThreads[*it].updateTimeToSleep();
         if (allThreads[*it].getTimeToSleep() == 0){
-            if (allThreads[*it].getCurState() != blocked)
+            if (allThreads[*it].getCurState() != sleep_and_blocked)
                 readyThreads.push_back(*it);
+            else
+                allThreads[*it].setCurState(blocked);
             it = sleepingThreads.erase(it);
         }
         else
@@ -260,10 +266,16 @@ void awake() {
 */
 int uthread_spawn(thread_entry_point entry_point){
     if (!entry_point)
+    {
+        std::cerr << "thread library error: invalid given function" << std::endl;
         return -1;
+    }
     const int freeID = find_index_of_next_false(std::begin(IDs), std::end(IDs));
     if (freeID >= MAX_THREAD_NUM)
+    {
+        std::cerr << "thread library error: too many threads" << std::endl;
         return -1;
+    }
     allThreads[freeID] =  myThread(freeID, STACK_SIZE);
     setup_thread(freeID, allThreads[freeID].getStack(), entry_point);
     readyThreads.push_back(freeID);
@@ -300,8 +312,8 @@ int uthread_terminate(int tid) {
       readyThreads.remove(tid);
   }
   IDs[tid] = false;
-  delete &allThreads[tid];
-  allThreads[tid];
+    allThreads[tid].deleteStack();
+    allThreads.erase(tid);
   return 0;
 }
 
@@ -359,8 +371,7 @@ int uthread_resume(int tid){
         return -1;
     }
     if (allThreads[tid].getCurState() == running || allThreads[tid].getCurState() == ready){
-        std::cerr << "thread library error: the thread is not blocked" << std::endl;
-        return -1;
+        return 0;
     }
     readyThreads.push_back(tid);
     allThreads[tid].setCurState(ready);
@@ -392,7 +403,7 @@ int uthread_sleep(int num_quantums){
     }
     allThreads[runThread].setTimeToSleep(num_quantums);
     sleepingThreads.push_back(runThread);
-    timer_handler(3); // TODO
+    timer_handler(SLEEP); // TODO
     return 0;
 }
 
