@@ -40,6 +40,7 @@ int quantum_time;
 int quantum_time_counter;
 
 sigjmp_buf env[MAX_THREAD_NUM];
+sigset_t mask;
 
 struct sigaction sa = {0};
 struct itimerval timer;
@@ -53,6 +54,10 @@ typedef unsigned long address_t;
 #define JB_PC 7
 
 #define DEF "thread library error: quantum_usecs must be positive integer"
+
+#define MASKING sigprocmask(SIG_BLOCK, &mask, nullptr);
+#define UNMASKING sigprocmask(SIG_UNBLOCK, &mask, nullptr);
+
 
 #define BLOCKED 0
 
@@ -149,6 +154,8 @@ int uthread_init(int quantum_usecs) {
       std::cerr << DEF << std::endl;
       return -1;
   }
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGVTALRM);
   allThreads[0] = myThread(0, STACK_SIZE);
   allThreads[0].setCurState(running);
   allThreads[0].updateQuantumLife();
@@ -188,11 +195,15 @@ void timer_init(){
 
 void jump_to_thread(int tid)
 {
+    MASKING
     runThread = tid;
     siglongjmp(env[tid], 1);
+    UNMASKING
+
 }
 
 void timer_handler(int sig) {
+    MASKING
     quantum_time_counter++;
 
     awake();
@@ -240,11 +251,14 @@ void timer_handler(int sig) {
             allThreads[runThread].setCurState(running);
             allThreads[runThread].updateQuantumLife();
         }
+        UNMASKING
         jump_to_thread(runThread);
     }
+
 }
 
 void awake() {
+    MASKING
     std::set<int> need_to_wake;
     for (auto it = sleepingThreads.begin(); it != sleepingThreads.end(); ++it){
         if (allThreads[*it].getCurState() == running){ // didn't pass a quantum yet
@@ -272,6 +286,7 @@ void awake() {
         allThreads[*it].setTimeToSleep(0);
         sleepingThreads.erase(*it);
     }
+    UNMASKING
 
 
 /*    for (auto it = sleepingThreads.begin(); it != sleepingThreads.end();it++) {
@@ -294,21 +309,25 @@ void awake() {
  * @return On success, return the ID of the created myThread. On failure, return -1.
 */
 int uthread_spawn(thread_entry_point entry_point){
+    MASKING
     if (!entry_point)
     {
         std::cerr << "thread library error: invalid given function" << std::endl;
+        UNMASKING
         return -1;
     }
     const int freeID = find_index_of_next_false(std::begin(IDs), std::end(IDs));
     if (freeID >= MAX_THREAD_NUM)
     {
         std::cerr << "thread library error: too many threads" << std::endl;
+        UNMASKING
         return -1;
     }
     allThreads[freeID] =  myThread(freeID, STACK_SIZE);
     setup_thread(freeID, allThreads[freeID].getStack(), entry_point);
     readyThreads.push_back(freeID);
     IDs[freeID] = true;
+    UNMASKING
     return freeID;
 }
 
@@ -324,14 +343,17 @@ int uthread_spawn(thread_entry_point entry_point){
  * itself or the main myThread is terminated, the function does not return.
 */
 int uthread_terminate(int tid) {
+    MASKING
   if (tid < 0 || tid >= MAX_THREAD_NUM || !IDs[tid]) {
       std::cerr << "thread library error: no such thread" << std::endl;
+      UNMASKING
       return -1;
   }
   if (tid == 0) //TODO erase the memory
     exit(0);
   if (allThreads[tid].getCurState() == running) {
       timer_handler(TERMINATED);
+      UNMASKING
       return 0;
   }
   else if (allThreads[tid].getCurState() == ready){
@@ -343,7 +365,8 @@ int uthread_terminate(int tid) {
   IDs[tid] = false;
   allThreads[tid].deleteStack();
   allThreads.erase(tid);
-  return 0;
+    UNMASKING
+    return 0;
 }
 
 
@@ -357,12 +380,15 @@ int uthread_terminate(int tid) {
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_block(int tid){
+    MASKING
     if (tid < 0 || tid >= MAX_THREAD_NUM || !IDs[tid]){
         std::cerr << "thread library error: no such thread" << std::endl;
+        UNMASKING
         return -1;
     }
     if (tid == 0){
         std::cerr << "thread library error: can't block main thread" << std::endl;
+        UNMASKING
         return -1;
     }
     if (tid == runThread){
@@ -376,15 +402,19 @@ int uthread_block(int tid){
         // run the first ready thread
         siglongjmp(env[runThread.get_id()], 1);*/
         timer_handler(BLOCKED); // TODO
+        UNMASKING
         return 0;
     }
-    if (allThreads[tid].getCurState() == blocked)
+    if (allThreads[tid].getCurState() == blocked){
+        UNMASKING
         return 0;
+    }
     readyThreads.remove(tid);
     if (allThreads[tid].getCurState() == sleeping)
         allThreads[tid].setCurState(sleep_and_blocked);
     else
         allThreads[tid].setCurState(blocked);
+    UNMASKING
     return 0;
 }
 
@@ -398,20 +428,25 @@ int uthread_block(int tid){
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_resume(int tid){
+    MASKING
     if (tid < 0 || tid >= MAX_THREAD_NUM || !IDs[tid]){
         std::cerr << "thread library error: no such thread" << std::endl;
+        UNMASKING
         return -1;
     }
     if (allThreads[tid].getCurState() == running || allThreads[tid].getCurState() == ready ||
         allThreads[tid].getCurState() == sleeping){
+        UNMASKING
         return 0;
     }
     if (allThreads[tid].getCurState() == sleep_and_blocked){
         allThreads[tid].setCurState(sleeping);
+        UNMASKING
         return 0;
     }
     readyThreads.push_back(tid);
     allThreads[tid].setCurState(ready);
+    UNMASKING
     return 0;
 }
 
@@ -430,17 +465,21 @@ int uthread_resume(int tid){
  * @return On success, return 0. On failure, return -1.
 */
 int uthread_sleep(int num_quantums){
+    MASKING
     if (runThread == 0){
         std::cerr << "thread library error: main thread can't sleep" << std::endl;
+        UNMASKING
         return -1;
     }
     if (num_quantums < 0){
         std::cerr << "thread library error: can't sleep negative time" << std::endl;
+        UNMASKING
         return -1;
     }
     allThreads[runThread].setTimeToSleep(num_quantums);
     sleepingThreads.insert(runThread);
     timer_handler(SLEEP); // TODO
+    UNMASKING
     return 0;
 }
 
