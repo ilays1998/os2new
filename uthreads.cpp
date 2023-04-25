@@ -269,6 +269,7 @@ void timer_handler(int sig) {
             allThreads[runThread].setCurState(running);
             allThreads[runThread].updateQuantumLife();
         }
+
         else{
             runThread = 0;
             allThreads[runThread].setCurState(running);
