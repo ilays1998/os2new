@@ -29,7 +29,7 @@ typedef void (*thread_entry_point)(void);
 /* internal interface */
 
 std::list<int> readyThreads;
-std::list<int> sleepingThreads;
+std::set<int> sleepingThreads;
 std::map<int, myThread> allThreads;
 
 bool IDs[MAX_THREAD_NUM];
@@ -196,6 +196,7 @@ void timer_handler(int sig) {
     quantum_time_counter++;
 
     awake();
+
     int ret_val = sigsetjmp(env[runThread], 1);
     //printf("yield: ret_val=%d\n", ret_val);
     bool did_just_save_bookmark = ret_val == 0;
@@ -262,11 +263,14 @@ void awake() {
     }
     for (auto it = need_to_wake.begin(); it != need_to_wake.end(); ++it){
         if (allThreads[*it].getCurState() != sleep_and_blocked)
+        {
             readyThreads.push_back(*it);
+            allThreads[*it].setCurState(ready);
+        }
         else
             allThreads[*it].setCurState(blocked);
         allThreads[*it].setTimeToSleep(0);
-        sleepingThreads.remove(*it);
+        sleepingThreads.erase(*it);
     }
 
 
@@ -334,7 +338,7 @@ int uthread_terminate(int tid) {
       readyThreads.remove(tid);
   }
   else if (allThreads[tid].getCurState() == sleep_and_blocked || allThreads[tid].getCurState() == sleeping){
-      sleepingThreads.remove(tid);
+      sleepingThreads.erase(tid);
   }
   IDs[tid] = false;
   allThreads[tid].deleteStack();
@@ -377,7 +381,10 @@ int uthread_block(int tid){
     if (allThreads[tid].getCurState() == blocked)
         return 0;
     readyThreads.remove(tid);
-    allThreads[tid].setCurState(blocked);
+    if (allThreads[tid].getCurState() == sleeping)
+        allThreads[tid].setCurState(sleep_and_blocked);
+    else
+        allThreads[tid].setCurState(blocked);
     return 0;
 }
 
@@ -432,7 +439,7 @@ int uthread_sleep(int num_quantums){
         return -1;
     }
     allThreads[runThread].setTimeToSleep(num_quantums);
-    sleepingThreads.push_back(runThread);
+    sleepingThreads.insert(runThread);
     timer_handler(SLEEP); // TODO
     return 0;
 }
