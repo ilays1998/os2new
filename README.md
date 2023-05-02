@@ -4,10 +4,11 @@ Ilay Soffer (207446709), Ramon Zerem(209492156)
 EX: 2
 
 FILES:
-  uthreads.cpp - static libary for user level threads
-  uthreads.h - header for the static libary for user level threads
-  myThread.cpp - class for the myThread represnting single thread in the user threads libary
-  myThread.h - header for myThread class 
+
+  * uthreads.cpp - static libary for user level threads
+  * uthreads.h - header for the static libary for user level threads
+  * myThread.cpp - class for the myThread represnting single thread in the user threads libary
+  * myThread.h - header for myThread class 
 
 
 ANSWERS:
