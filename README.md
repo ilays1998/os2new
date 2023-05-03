@@ -53,11 +53,22 @@ Q3:
 
 Q4:
 
+ A signal is triggered by the shell, which is listening for user input from the keyboard. When the user types "kill pid"
+ and presses enter, the shell interprets this as a command to send a signal to the process identified by the given PID.
+
+ The signal sent by default is SIGTERM, which requests the process to terminate gracefully.
+
+ The operating system is responsible for handling the signal and informing the application that it should terminate. The 
+ application can choose how to handle the signal. In the case of the default SIGTERM signal, the application may choose 
+ to gracefully shut down by saving any unsaved data and closing open files. If the application does not respond to the 
+ SIGTERM signal, the OS may send a SIGKILL signal, which forcefully terminates the process without allowing it to perform 
+ any cleanup actions.
+
 Q5:
 
   'real' time refers to the actual amount of time that has passed in the real world, while 'virtual' time refers to a 
   simulated or artificial representation of time.
-  One example of using real time is in a program that measures the performance of a system like benchmarks. We want to know how much
-  time it takes for an action to occured in real time.
+  One example of using real time is in a program that measures the performance of a system like benchmarks. We want 
+  to know how much time it takes for an action to occured in real time.
   One scenario were we can use virtual time is games, I myself used 'virtual' time when building a game and. I've added 
   slowmotion affect by using virtual time. 
